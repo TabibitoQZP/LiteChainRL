@@ -37,6 +37,10 @@ Now please do your analysis step by step!
 
 
 class CodeEvalReward(BaseReward):
+    """
+    Compare the difference between the code result and the final result.
+    """
+
     def __init__(self, engine_instance: LoRAEngine):
         self.engine_instance = engine_instance
 
@@ -98,7 +102,7 @@ class CodeEvalReward(BaseReward):
             cr_list.append(f'# Code\n{code}\n\n# Result\n"""\n{result}\n"""')
         return cr_list
 
-    def reward(self, items, ground_truth):
+    def reward(self, items, metadata):
         texts = [item["text"] for item in items]
 
         prompts = []

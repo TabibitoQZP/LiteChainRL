@@ -8,8 +8,7 @@ def engine_worker(
     input_queue,
     control_event,
     output_queue,
-    reward_class: BaseReward,
-    *args,
+    reward_class,
     **kwargs,
 ):
     lora_engine = LoRAEngine(
@@ -45,6 +44,7 @@ def engine_manager(
     mini_batch_queue,
     **kwargs,
 ):
+    dataset = dataset()
     mp.set_start_method("spawn")
 
     input_queue = mp.Queue()

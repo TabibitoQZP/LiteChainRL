@@ -15,17 +15,30 @@ class LoRAEngine:
         gpu_memory_utilization=0.7,
         max_token_per_turn=1024,
         seed=42,
+        qlora=False,
     ):
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
         self.max_model_len = max_model_len
-        engine_args = vllm.EngineArgs(
-            model=model,
-            gpu_memory_utilization=gpu_memory_utilization,
-            enable_prefix_caching=True,
-            max_model_len=max_model_len,
-            tensor_parallel_size=len(cuda_visible_devices.split(",")),
-            enable_lora=True,
-        )
+        if qlora:
+            engine_args = vllm.EngineArgs(
+                model=model,
+                gpu_memory_utilization=gpu_memory_utilization,
+                enable_prefix_caching=True,
+                max_model_len=max_model_len,
+                tensor_parallel_size=len(cuda_visible_devices.split(",")),
+                enable_lora=True,
+                quantization="bitsandbytes",
+                load_format="bitsandbytes",
+            )
+        else:
+            engine_args = vllm.EngineArgs(
+                model=model,
+                gpu_memory_utilization=gpu_memory_utilization,
+                enable_prefix_caching=True,
+                max_model_len=max_model_len,
+                tensor_parallel_size=len(cuda_visible_devices.split(",")),
+                enable_lora=True,
+            )
         self.engine = vllm.LLMEngine.from_engine_args(engine_args)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.params = vllm.SamplingParams(
