@@ -129,6 +129,12 @@ class CodeEvalReward(BaseReward):
                 rewards[i] += res_rewards[rr_pointer]
                 rr_pointer += 1
 
+        std = np.std(rewards)
+        avg = np.mean(rewards)
+
         for i in range(len(items)):
-            items[i]["reward"] = rewards[i]
+            if std == 0:
+                items[i]["reward"] = 0
+            else:
+                items[i]["reward"] = (rewards[i] - avg) / std
         return items

@@ -1,87 +1,95 @@
-import torch.multiprocessing as mp
+import ray
+from ray.util.queue import Queue
 
 from rollout.lora_engine import LoRAEngine
 from reward.base_reward import BaseReward
 
 
-def engine_worker(
-    input_queue,
-    control_event,
-    output_queue,
-    reward_class,
-    **kwargs,
-):
-    lora_engine = LoRAEngine(
-        **kwargs,
-    )
-    reward_instance = reward_class(lora_engine)
+@ray.remote
+class LoRAEngineWorker:
+    def __init__(self, engine_config, inner_reward_class):
+        self.engine_config = engine_config
+        self.lora_engine = LoRAEngine(engine_config)
+        self.reward_instance = inner_reward_class(self.lora_engine)
 
-    control_event.wait()
-    while True:
-        try:
-            requests = input_queue.get_nowait()
-        except:
-            control_event.wait()
-            lora_engine.update_lora(kwargs["lora_path"])
-            continue
+    def listen(self, in_q, out_q):
+        while True:
+            requests = in_q.get()
+            if requests == -1:
+                break
+            responses = self.lora_engine.multi_turn_gen(requests[0], requests[1])
+            responses = self.reward_instance.reward(responses, requests[2])
+            out_q.put(responses)
 
-        if requests == -1:
-            break
-
-        # requests are (prompt, env, ground_truth)
-        responses = lora_engine.multi_turn_gen(requests[0], requests[1])
-        responses = reward_instance.reward(responses, requests[2])
-        output_queue.put(responses)
-
-
-def engine_manager(
-    dataset,
-    devices_list,
-    group_size,
-    update_batch,
-    update_event,
-    mini_batch,
-    mini_batch_queue,
-    **kwargs,
-):
-    dataset = dataset()
-    mp.set_start_method("spawn")
-
-    input_queue = mp.Queue()
-    output_queue = mp.Queue()
-    kwargs["input_queue"] = input_queue
-    kwargs["output_queue"] = output_queue
-
-    events = []
-    for idx in range(len(devices_list)):
-        control_event = mp.Event()
-        events.append(control_event)
-        kwargs["control_event"] = control_event
-        kwargs["cuda_visible_devices"] = devices_list[idx]
-        kwargs["seed"] = idx + 42
-        p = mp.Process(target=engine_worker, kwargs=kwargs)
-        p.start()
-
-    send_count = 0
-    for prompt, env, ground_truth in dataset:
-        prompts = [prompt for _ in range(group_size)]
-        envs = [env.copy() for _ in range(group_size)]
-        ground_truths = [ground_truth for _ in range(group_size)]
-        input_queue.put((prompts, envs, ground_truths))
-        send_count += 1
-
-        if send_count * group_size >= update_batch:
-            for e in events:
-                e.set()
+    def update_weight(self, lora_path=None):
+        if lora_path:
+            self.lora_engine.update_lora(lora_path)
         else:
-            continue
+            self.lora_engine.update_lora(self.engine_config.lora_path)
 
-        output_items = []
-        for _ in range(send_count):
-            output_items.extend(output_queue.get())
-            if len(output_items) >= mini_batch:
-                mini_batch_queue.put(output_items[:mini_batch])
-                output_items = output_items[mini_batch:]
+    def ready(self):
+        return True
 
-        update_event.wait()
-        send_count = 0
+
+@ray.remote
+class RolloutManager:
+    def __init__(
+        self,
+        dataset,
+        inner_reward_class,
+        devices_list,
+        engine_config,
+    ):
+        self.dataset = dataset
+        self.index = 0
+
+        self.workers = []
+        for devices in devices_list:
+            engine_config.cuda_visible_devices = devices
+            engine_config.seed += 1
+            self.workers.append(
+                LoRAEngineWorker.remote(engine_config, inner_reward_class)
+            )
+
+        self.in_q = Queue()
+        self.out_q = Queue()
+
+    def start_a_rollout(
+        self,
+        sampling_size,
+        update_batch,
+        out_batch,
+        out_queue,
+    ):
+        assert update_batch % sampling_size == 0, (
+            f"update_batch({update_batch}) should be devided by sampling_size({sampling_size})."
+        )
+        send_batch = update_batch // sampling_size
+        # send to the input queue
+        for idx in range(send_batch):
+            prompt, env, metadatum = self.dataset[self.index]
+            self.index += 1
+            prompts = [prompt for _ in range(sampling_size)]
+            envs = [env.copy() for _ in range(sampling_size)]
+            metadata = [metadatum for _ in range(sampling_size)]
+            self.in_q.put((prompts, envs, metadata))
+        for w in self.workers:
+            self.in_q.put(-1)
+
+        for w in self.workers:
+            w.listen.remote(self.in_q, self.out_q)
+
+        # get items
+        all_items = []
+        for idx in range(send_batch):
+            all_items.extend(self.out_q.get())
+            while len(all_items) >= out_batch:
+                out_queue.put(all_items[:out_batch])
+                all_items = all_items[out_batch:]
+
+    def update_weight(self, lora_path=None):
+        for w in self.workers:
+            w.update_weight.remote(lora_path)
+        for w in self.workers:
+            ray.get(w.ready.remote())
+        return True
