@@ -50,6 +50,7 @@ class TrainerWorker:
         world_size,
         rank,
         device,
+        qlora,
     ):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
         os.environ["MASTER_ADDR"] = "127.0.0.1"
@@ -64,12 +65,14 @@ class TrainerWorker:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         self.lora_path = lora_path
-        nf4_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
-        )
+        nf4_config = None
+        if qlora:
+            nf4_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            )
         model = AutoModelForCausalLM.from_pretrained(
             model_path, quantization_config=nf4_config
         )
@@ -165,7 +168,7 @@ class TrainerWorker:
         self.engine.step()
 
     def save_lora(self):
-        self.engine.model.save_pretrained(self.lora_path)
+        self.engine.module.save_pretrained(self.lora_path)
         return True
 
     def ready(self):
@@ -181,6 +184,7 @@ class TrainerManager:
         ds_config,
         master_port,
         devices,
+        qlora,
     ):
         self.world_size = len(devices)
         self.trainers = []
@@ -194,6 +198,7 @@ class TrainerManager:
                     self.world_size,
                     rank,
                     devices[rank],
+                    qlora,
                 )
             )
 

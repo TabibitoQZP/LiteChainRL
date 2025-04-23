@@ -2,6 +2,7 @@ import os
 import re
 import random
 import pandas as pd
+from peft import LoraConfig
 import ray
 from ray.util.queue import Queue
 import simplejson as json
@@ -238,6 +239,7 @@ if __name__ == "__main__":
         ds_config,
         11451,
         [4, 5],
+        engine_config.qlora,
     )
 
     while True:
