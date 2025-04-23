@@ -11,7 +11,7 @@ from trigger.code_trigger import CodeTrigger
 from rollout.engine_worker import RolloutManager
 from rollout.lora_engine import LoRAEngineConfig
 from reward.code_eval_reward import CodeEvalReward
-from trainer.trainer_worker import TrainerWorker
+from trainer.trainer_worker import TrainerManager
 
 
 class LoadWikiDB:
@@ -182,11 +182,16 @@ if __name__ == "__main__":
     loraPath = "data/lora"
     max_model_len = 8192
     rollout_device_list = "7 6".split()
-    engine_config = LoRAEngineConfig(modelPath, loraPath, qlora=True)
+    engine_config = LoRAEngineConfig(
+        modelPath,
+        loraPath,
+        qlora=True,
+        max_model_len=max_model_len,
+    )
 
     # config traning
     sampling_batch = 8
-    mini_batch = 2
+    mini_batch = 1
     train_batch_size = 16
     update_batch = 32
     deepspeed_devices = "4,5"
@@ -227,8 +232,12 @@ if __name__ == "__main__":
     )
 
     # init trainer
-    trainer_worker = TrainerWorker.options(resources={"GPU4": 1, "GPU5": 1}).remote(
-        modelPath, loraPath, ds_config, deepspeed_devices
+    trainer_manager = TrainerManager.remote(
+        modelPath,
+        loraPath,
+        ds_config,
+        11451,
+        [4, 5],
     )
 
     while True:
@@ -239,9 +248,10 @@ if __name__ == "__main__":
             out_queue,
         )
         ray.get(
-            trainer_worker.step.remote(
-                update_batch,
+            trainer_manager.train_a_rollout.remote(
                 out_queue,
+                update_batch,
+                mini_batch,
                 max_model_len,
                 epsilon,
                 beta,
@@ -249,4 +259,3 @@ if __name__ == "__main__":
             )
         )
         rollout_manager.update_weight.remote()
-        break
