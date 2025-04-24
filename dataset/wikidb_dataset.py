@@ -2,17 +2,10 @@ import os
 import re
 import random
 import pandas as pd
-from peft import LoraConfig
-import ray
-from ray.util.queue import Queue
 import simplejson as json
 from torch.utils.data import Dataset
 
 from trigger.code_trigger import CodeTrigger
-from rollout.engine_worker import RolloutManager
-from rollout.lora_engine import LoRAEngineConfig
-from reward.code_eval_reward import CodeEvalReward
-from trainer.trainer_worker import TrainerManager
 
 
 class LoadWikiDB:
@@ -21,7 +14,7 @@ class LoadWikiDB:
         sqlCreationPath,
         setsPath,
         dbRoot,
-        shuffle=True,
+        shuffle=False,
     ):
         self.dbRoot = dbRoot
         with open(sqlCreationPath, "r") as js:
@@ -137,128 +130,7 @@ class WikiDBDataset(Dataset):
             python_code="\n".join(code_list),
             outputs="\n".join(result_list),
         )
+
+        # NOTE: The dataset should return a triplet (prompt, trigger, metadata),
+        # the metadata is used for reward evaluation.
         return prompt, CodeTrigger(env), None
-
-
-def init_lora(modelPath, loraPath, peftConfig=None):
-    import peft
-    from transformers import AutoModelForCausalLM
-
-    if peftConfig is None:
-        # 默认的config就是r=8/16, alpha=r/2r
-        peftConfig = peft.LoraConfig(
-            task_type=peft.TaskType.CAUSAL_LM,
-            inference_mode=False,
-            r=16,
-            lora_alpha=32,
-            lora_dropout=0.1,
-        )
-    model = AutoModelForCausalLM.from_pretrained(modelPath).to("cpu")
-
-    os.makedirs(loraPath, exist_ok=True)
-    model.add_adapter(peftConfig, adapter_name="init_lora")
-    model.save_pretrained(loraPath)
-
-
-if __name__ == "__main__":
-    ray.init()
-
-    # XXX: init dataset
-    sqlCreationPath = "./data/SQLCreation.json"
-    setsPath = "./data/sets.json"
-    dbRoot = "/mnt/data/litechainrl/dataset/WikiDBs/part-0/"
-    start = 4
-    end = 32
-    dataset = WikiDBDataset(
-        sqlCreationPath,
-        setsPath,
-        dbRoot,
-        start,
-        end,
-        prompt_template,
-    )
-
-    # config model
-    modelPath = "/mnt/data/litechainrl/models/Qwen2.5-Coder-7B-Instruct/"
-    loraPath = "data/lora"
-    max_model_len = 8192
-    rollout_device_list = "7 6".split()
-    engine_config = LoRAEngineConfig(
-        modelPath,
-        loraPath,
-        qlora=True,
-        gpu_memory_utilization=0.4,
-        max_model_len=max_model_len,
-    )
-
-    # config traning
-    sampling_batch = 8
-    mini_batch = 1  # used for every
-    train_batch_size = 16
-    update_batch = 32
-
-    # config deepspeed
-    ds_config = {
-        "train_batch_size": train_batch_size,
-        "train_micro_batch_size_per_gpu": mini_batch,
-        "optimizer": {"type": "AdamW", "params": {"lr": 2e-5}},
-        "bf16": {"enabled": True},
-        "zero_optimization": {
-            "stage": 2,
-            "allgather_partitions": True,
-            "allgather_bucket_size": 2e8,
-            "overlap_comm": True,
-            "reduce_scatter": True,
-            "reduce_bucket_size": 2e8,
-            "contiguous_gradients": True,
-            "stage3_gather_16bit_weights_on_model_save": True,
-            "offload_optimizer": {"device": "cpu"},
-        },
-    }
-
-    # config grpo
-    epsilon = 0.2
-    beta = 0.8
-
-    # init lora
-    init_lora(modelPath, loraPath)
-
-    # init engine manager
-    out_queue = Queue()
-    rollout_manager = RolloutManager.remote(
-        dataset,
-        CodeEvalReward,
-        ["7", "6"],
-        engine_config,
-    )
-
-    # init trainer
-    trainer_manager = TrainerManager.remote(
-        modelPath,
-        loraPath,
-        ds_config,
-        11451,
-        [2, 3],
-        engine_config.qlora,
-    )
-
-    while True:
-        rollout_manager.start_a_rollout.remote(
-            sampling_batch,
-            update_batch,
-            mini_batch,
-            out_queue,
-        )
-        ray.get(
-            trainer_manager.train_a_rollout.remote(
-                out_queue,
-                update_batch,
-                mini_batch,
-                max_model_len,
-                epsilon,
-                beta,
-                sampling_batch,
-            )
-        )
-        assert out_queue.empty(), "The queue should be empty."
-        rollout_manager.update_weight.remote()

@@ -1,8 +1,10 @@
+import os
 import ray
 from ray.util.queue import Queue
 
 from rollout.lora_engine import LoRAEngine
 from reward.base_reward import BaseReward
+from trainer import Logger
 
 
 @ray.remote
@@ -39,9 +41,12 @@ class RolloutManager:
         inner_reward_class,
         devices_list,
         engine_config,
+        log_path,
     ):
+        self.logger = Logger(os.path.join(log_path, "rollout_log.jsonl"))
+        self.index = self.logger.read_last().get("index", 0)
+        print(f"Rollout will start at {self.index}.")
         self.dataset = dataset
-        self.index = 0
 
         self.workers = []
         for devices in devices_list:
@@ -65,14 +70,18 @@ class RolloutManager:
             f"update_batch({update_batch}) should be devided by sampling_size({sampling_size})."
         )
         send_batch = update_batch // sampling_size
-        # send to the input queue
+        # send data to the input queue
         for idx in range(send_batch):
+            if self.index >= len(self.dataset):
+                return True
             prompt, env, metadatum = self.dataset[self.index]
             self.index += 1
             prompts = [prompt for _ in range(sampling_size)]
             envs = [env.copy() for _ in range(sampling_size)]
             metadata = [metadatum for _ in range(sampling_size)]
             self.in_q.put((prompts, envs, metadata))
+
+        # send stop signals to the input queue
         for w in self.workers:
             self.in_q.put(-1)
 
@@ -87,7 +96,11 @@ class RolloutManager:
                 out_queue.put(all_items[:out_batch])
                 all_items = all_items[out_batch:]
 
+        return False
+
     def update_weight(self, lora_path=None):
+        # add next batch index for reload
+        self.logger.append({"index": self.index})
         for w in self.workers:
             w.update_weight.remote(lora_path)
         for w in self.workers:

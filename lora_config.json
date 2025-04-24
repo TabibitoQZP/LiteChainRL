@@ -1,0 +1,7 @@
+{
+  "inference_mode": false,
+  "lora_alpha": 32,
+  "lora_dropout": 0.1,
+  "r": 16,
+  "task_type": "CAUSAL_LM"
+}

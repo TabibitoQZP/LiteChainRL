@@ -2,41 +2,7 @@ import os
 import ray
 import torch
 
-
-def get_per_token_logps(logits, input_ids):
-    logits = logits[:, :-1, :]
-    input_ids = input_ids[:, 1:]
-    per_token_logps = []  # Use a loop to reduce memory peak.
-    for logits_row, input_ids_row in zip(logits, input_ids):
-        log_probs = logits_row.log_softmax(dim=-1)
-        token_log_prob = torch.gather(
-            log_probs, dim=1, index=input_ids_row.unsqueeze(1)
-        ).squeeze(1)
-        per_token_logps.append(token_log_prob)
-    return torch.stack(per_token_logps)
-
-
-def grpo_loss(
-    per_token_logps,
-    ref_logprobs,
-    rollout_logprobs,
-    training_mask,
-    reward,
-    epsilon,
-    beta,
-    G,
-):
-    pi_theta = torch.exp(per_token_logps)
-    pi_old = torch.exp(rollout_logprobs)
-    pi_ref = torch.exp(ref_logprobs)
-    f = pi_theta / pi_old
-    restricted_f = torch.min(
-        f * reward, torch.clamp(f, 1 - epsilon, 1 + epsilon) * reward
-    )
-    D_kl = pi_ref / pi_theta - ref_logprobs + per_token_logps - 1
-    sum_val = torch.sum(restricted_f + beta * D_kl * training_mask, -1)
-    avg_val = sum_val / torch.sum(training_mask, -1)
-    return -torch.sum(avg_val) / G
+from trainer import get_per_token_logps, grpo_loss, Logger
 
 
 @ray.remote
@@ -166,6 +132,7 @@ class TrainerWorker:
         )
         self.engine.backward(loss)
         self.engine.step()
+        return loss.item()
 
     def save_lora(self):
         self.engine.module.save_pretrained(self.lora_path)
@@ -185,7 +152,9 @@ class TrainerManager:
         master_port,
         devices,
         qlora,
+        log_path,
     ):
+        self.logger = Logger(os.path.join(log_path, "trainer_log.jsonl"))
         self.world_size = len(devices)
         self.trainers = []
         for rank in range(len(devices)):
@@ -214,16 +183,26 @@ class TrainerManager:
     ):
         round = update_batch // (mini_batch * self.world_size)
 
+        losses = []
         for r in range(round):
+            tmp_loss = []
             for t in self.trainers:
                 curr_batch = out_queue.get()
-                t.step.remote(
-                    curr_batch,
-                    max_model_len,
-                    epsilon,
-                    beta,
-                    G,
+                tmp_loss.append(
+                    t.step.remote(
+                        curr_batch,
+                        max_model_len,
+                        epsilon,
+                        beta,
+                        G,
+                    )
                 )
+            losses.append(tmp_loss)
+
+        for i in range(round):
+            for j in range(self.world_size):
+                losses[i][j] = ray.get(losses[i][j])
+            self.logger.append(losses[i])
 
         for t in self.trainers:
             ray.get(t.ready.remote())

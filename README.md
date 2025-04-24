@@ -1,6 +1,6 @@
 # LiteChainRL
 
-A lightweight, multi-turn RL framework leveraging QLoRA for efficient LLM training.
+A lightweight, multi-turn RL framework leveraging LoRA/QLoRA for efficient LLM training.
 
 ## Overview
 
@@ -9,8 +9,6 @@ LiteChainRL streamlines experimentation with reinforcement learning on modern LL
 - **Multi‑turn Rollouts** for interactive tasks such as function calling and code generation
 
 - **QLoRA Integration** to dramatically reduce memory usage through low‑rank adapter tuning
-
-- **Minimal Dependencies**—built on vLLM for rollout generation and PyTorch for training
 
 - **Easy Setup** with clear abstractions and a plug‑and‑play “Trigger” interface for custom environments
 
@@ -22,9 +20,9 @@ With LiteChainRL, researchers can rapidly prototype agent behaviors without the 
 
 Initiate sequential interactions by defining your own "Trigger" class as an environment. Whenever a specified pattern appears in the model’s output, LiteChainRL pauses generation, invokes the environment logic, and resumes—enabling complex, agent‑style workflows.
 
-2. **QLoRA Support**
+2. **LoRA/QLoRA Support**
 
-Leverage low‑rank adapters to fine‑tune large models with a fraction of the memory footprint required for full‑parameter updates. While other tools like DeepSpeed can further optimize memory usage, LiteChainRL relies solely on PyTorch to keep installation and configuration straightforward.
+Leverage low‑rank adapters to fine‑tune large models with a fraction of the memory footprint required for full‑parameter updates.
 
 3. **Lightweight Design**
 
@@ -38,4 +36,4 @@ The built‑in Trigger system lets you connect any callable environment—be it 
 
 ## Usage
 
-TODO
+Currently only support GRPO, more RL algorithms coming soon.

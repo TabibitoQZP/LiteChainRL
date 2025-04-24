@@ -1,0 +1,18 @@
+python train.py \
+  --log_path data/tmp_log \
+  --lora_config lora_config.json \
+  --model_path /mnt/data/litechainrl/models/Qwen2.5-Coder-7B-Instruct/ \
+  --lora_path data/tmp_lora \
+  --qlora \
+  --epsilon 0.2 \
+  --beta 0.8 \
+  --ds_config ds_config.json \
+  --master_port 14514 \
+  --trainer_gpu 4 5 \
+  --sampling_batch 8 \
+  --vllm_gpu 6 7 \
+  --gpu_memory_utilization 0.4 \
+  --base_seed 114514 \
+  --max_model_len 8192 \
+  --max_token_per_turn 1024 \
+  --update_batch 32
