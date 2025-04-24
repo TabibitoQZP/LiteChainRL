@@ -87,6 +87,7 @@ class CodeEvalReward(BaseReward):
 
     @staticmethod
     def extract_code_and_result(text):
+        invalid_start = "EmptyOutput MaxTry Timeout Error".split()
         pat = re.findall(
             r"```python\n(.*?)```\s*<Code Result>\n(.*?)\n</Code Result>",
             text,
@@ -97,7 +98,12 @@ class CodeEvalReward(BaseReward):
         for p in pat:
             code = p[0]
             result = p[1]
-            if result.startswith("Out of Limit") or result.startswith("Error"):
+
+            invalid_result = False
+            for inv_s in invalid_start:
+                if result.startswith(inv_s):
+                    invalid_result = True
+            if invalid_result:
                 continue
             cr_list.append(f'# Code\n{code}\n\n# Result\n"""\n{result}\n"""')
         return cr_list

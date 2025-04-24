@@ -1,10 +1,22 @@
 import os
 import ray
+import simplejson as json
 from ray.util.queue import Queue
+from uuid import uuid4
+from datetime import datetime
 
 from rollout.lora_engine import LoRAEngine
 from reward.base_reward import BaseReward
 from trainer import Logger
+
+
+def save_outupt(data, root="data/rollout"):
+    os.makedirs(root, exist_ok=True)
+    uid = str(uuid4())
+    timestr = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    path = os.path.join(root, f"({timestr}){uid}.json")
+    with open(path, "w") as js:
+        json.dump(data, js, indent=2)
 
 
 @ray.remote
@@ -44,6 +56,7 @@ class RolloutManager:
         log_path,
     ):
         self.logger = Logger(os.path.join(log_path, "rollout_log.jsonl"))
+        self.rollout_output_path = os.path.join(log_path, "rollout")
         self.index = self.logger.read_last().get("index", 0)
         print(f"Rollout will start at {self.index}.")
         self.dataset = dataset
@@ -93,6 +106,7 @@ class RolloutManager:
         for idx in range(send_batch):
             all_items.extend(self.out_q.get())
             while len(all_items) >= out_batch:
+                save_outupt(all_items[:out_batch], self.rollout_output_path)
                 out_queue.put(all_items[:out_batch])
                 all_items = all_items[out_batch:]
 

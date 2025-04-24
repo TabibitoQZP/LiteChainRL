@@ -91,7 +91,7 @@ You can write Python codes to explore a database. The following is an example.
 {outputs}
 </Code Result>
 
-Once you write a Python code block wrapped in '```python```'. It will be executed automatically and the printed results will be give back wrapped in '<Code Result></Code Result>'. Try to use this feature to explore the database and find an interesting conclusion. Your final conclusion should be wrapped in '<Answer></Answer>'.<|im_end|>
+Once you write a Python code block wrapped in '```python```'. It will be executed automatically and the printed results will be give back wrapped in '<Code Result></Code Result>'. Try to use this feature to explore the database and find an interesting conclusion. **You can write multiple Python code blocks for better exploration.** Your final conclusion should be wrapped in '<Answer></Answer>'.<|im_end|>
 <|im_start|>assistant
 """
 
