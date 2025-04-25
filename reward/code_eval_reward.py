@@ -37,6 +37,10 @@ Now please do your analysis step by step!
 
 
 class CodeEvalReward(BaseReward):
+    """
+    Compare the difference between the code result and the final result.
+    """
+
     def __init__(self, engine_instance: LoRAEngine):
         self.engine_instance = engine_instance
 
@@ -83,6 +87,7 @@ class CodeEvalReward(BaseReward):
 
     @staticmethod
     def extract_code_and_result(text):
+        invalid_start = "EmptyOutput MaxTry Timeout Error".split()
         pat = re.findall(
             r"```python\n(.*?)```\s*<Code Result>\n(.*?)\n</Code Result>",
             text,
@@ -93,12 +98,17 @@ class CodeEvalReward(BaseReward):
         for p in pat:
             code = p[0]
             result = p[1]
-            if result.startswith("Out of Limit") or result.startswith("Error"):
+
+            invalid_result = False
+            for inv_s in invalid_start:
+                if result.startswith(inv_s):
+                    invalid_result = True
+            if invalid_result:
                 continue
             cr_list.append(f'# Code\n{code}\n\n# Result\n"""\n{result}\n"""')
         return cr_list
 
-    def reward(self, items, ground_truth):
+    def reward(self, items, metadata):
         texts = [item["text"] for item in items]
 
         prompts = []
@@ -125,6 +135,12 @@ class CodeEvalReward(BaseReward):
                 rewards[i] += res_rewards[rr_pointer]
                 rr_pointer += 1
 
+        std = np.std(rewards)
+        avg = np.mean(rewards)
+
         for i in range(len(items)):
-            items[i]["reward"] = rewards[i]
+            if std == 0:
+                items[i]["reward"] = 0
+            else:
+                items[i]["reward"] = (rewards[i] - avg) / std
         return items

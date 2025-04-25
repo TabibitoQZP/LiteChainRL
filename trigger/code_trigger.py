@@ -45,7 +45,7 @@ def execWithOutput(code, env, timeLimit=8):
     except TimeoutError as e:
         sys.stdout = sys.__stdout__
         signal.alarm(0)
-        return "Timeout: Runing over 8 seconds and not stop. Please check your code!"
+        return f"Timeout: Runing over {timeLimit} seconds and not stop. Please check your code!"
     except Exception as e:
         sys.stdout = sys.__stdout__
         signal.alarm(0)

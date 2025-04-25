@@ -1,38 +1,54 @@
 import os
 import vllm
 from uuid import uuid4
+from dataclasses import dataclass
 from transformers import AutoTokenizer
 from vllm.lora.request import LoRARequest
 
 
+@dataclass
+class LoRAEngineConfig:
+    model: str
+    lora_path: str
+    cuda_visible_devices: str = "0"
+    max_model_len: int = 4096
+    gpu_memory_utilization: float = 0.7
+    max_token_per_turn: int = 1024
+    seed: int = 42
+    qlora: bool = False
+
+
 class LoRAEngine:
-    def __init__(
-        self,
-        model,
-        cuda_visible_devices,
-        lora_path,
-        max_model_len=4096,
-        gpu_memory_utilization=0.7,
-        max_token_per_turn=1024,
-        seed=42,
-    ):
-        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
-        self.max_model_len = max_model_len
-        engine_args = vllm.EngineArgs(
-            model=model,
-            gpu_memory_utilization=gpu_memory_utilization,
-            enable_prefix_caching=True,
-            max_model_len=max_model_len,
-            tensor_parallel_size=len(cuda_visible_devices.split(",")),
-            enable_lora=True,
-        )
+    def __init__(self, config: LoRAEngineConfig):
+        os.environ["CUDA_VISIBLE_DEVICES"] = config.cuda_visible_devices
+        self.max_model_len = config.max_model_len
+        if config.qlora:
+            engine_args = vllm.EngineArgs(
+                model=config.model,
+                gpu_memory_utilization=config.gpu_memory_utilization,
+                enable_prefix_caching=True,
+                max_model_len=config.max_model_len,
+                tensor_parallel_size=len(config.cuda_visible_devices.split(",")),
+                enable_lora=True,
+                quantization="bitsandbytes",
+                load_format="bitsandbytes",
+            )
+        else:
+            engine_args = vllm.EngineArgs(
+                model=config.model,
+                gpu_memory_utilization=config.gpu_memory_utilization,
+                enable_prefix_caching=True,
+                max_model_len=config.max_model_len,
+                tensor_parallel_size=len(config.cuda_visible_devices.split(",")),
+                enable_lora=True,
+            )
         self.engine = vllm.LLMEngine.from_engine_args(engine_args)
-        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.model)
         self.params = vllm.SamplingParams(
-            temperature=0.8,
+            temperature=1,
             repetition_penalty=1,
-            max_tokens=max_token_per_turn,
-            seed=seed,
+            max_tokens=config.max_token_per_turn,
+            seed=config.seed,
         )
         self.logprob_params = vllm.SamplingParams(
             temperature=0, top_p=1, max_tokens=1, prompt_logprobs=1
@@ -40,13 +56,13 @@ class LoRAEngine:
         self.normal_params = vllm.SamplingParams(
             temperature=0.8,
             repetition_penalty=1,
-            max_tokens=max_token_per_turn,
-            seed=seed,
+            max_tokens=config.max_token_per_turn,
+            seed=config.seed,
         )
 
         self.lora_idx = 1
         self.lora_request = LoRARequest(
-            f"lora_{self.lora_idx}", self.lora_idx, lora_path
+            f"lora_{self.lora_idx}", self.lora_idx, config.lora_path
         )
 
     def update_lora(self, lora_path):
@@ -139,7 +155,7 @@ class LoRAEngine:
                 "text": self.tokenizer.decode([it["token_id"] for it in v]),
                 "token_info": v,
             }
-        return data
+        return list(data.values())
 
     def _multi_turn_gen(self, prompts, envs):
         envMap = {}
