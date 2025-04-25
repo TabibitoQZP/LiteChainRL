@@ -4,6 +4,8 @@ import simplejson as json
 from ray.util.queue import Queue
 from uuid import uuid4
 from datetime import datetime
+import dataclasses
+import time
 
 from rollout.lora_engine import LoRAEngine
 from reward.base_reward import BaseReward
@@ -58,6 +60,7 @@ class RolloutManager:
         self.logger = Logger(os.path.join(log_path, "rollout_log.jsonl"))
         self.rollout_output_path = os.path.join(log_path, "rollout")
         self.index = self.logger.read_last().get("index", 0)
+        self.time_gap = 0
         print(f"Rollout will start at {self.index}.")
         self.dataset = dataset
 
@@ -66,7 +69,9 @@ class RolloutManager:
             engine_config.cuda_visible_devices = devices
             engine_config.seed += 1
             self.workers.append(
-                LoRAEngineWorker.remote(engine_config, inner_reward_class)
+                LoRAEngineWorker.remote(
+                    dataclasses.replace(engine_config), inner_reward_class
+                )
             )
 
         self.in_q = Queue()
@@ -79,6 +84,7 @@ class RolloutManager:
         out_batch,
         out_queue,
     ):
+        self.time_gap = time.time()
         assert update_batch % sampling_size == 0, (
             f"update_batch({update_batch}) should be devided by sampling_size({sampling_size})."
         )
@@ -110,11 +116,12 @@ class RolloutManager:
                 out_queue.put(all_items[:out_batch])
                 all_items = all_items[out_batch:]
 
+        self.time_gap = time.time() - self.time_gap
         return False
 
     def update_weight(self, lora_path=None):
         # add next batch index for reload
-        self.logger.append({"index": self.index})
+        self.logger.append({"index": self.index, "gap": self.time_gap})
         for w in self.workers:
             w.update_weight.remote(lora_path)
         for w in self.workers:

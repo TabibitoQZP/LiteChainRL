@@ -66,13 +66,12 @@ def grpo_loss(
     G,
 ):
     pi_theta = torch.exp(per_token_logps)
-    pi_old = torch.exp(rollout_logprobs)
     pi_ref = torch.exp(ref_logprobs)
-    f = pi_theta / pi_old
+    f = torch.exp(per_token_logps - rollout_logprobs)
     restricted_f = torch.min(
         f * reward, torch.clamp(f, 1 - epsilon, 1 + epsilon) * reward
     )
     D_kl = pi_ref / pi_theta - ref_logprobs + per_token_logps - 1
-    sum_val = torch.sum(restricted_f + beta * D_kl * training_mask, -1)
+    sum_val = torch.sum(restricted_f * training_mask + beta * D_kl * training_mask, -1)
     avg_val = sum_val / torch.sum(training_mask, -1)
     return -torch.sum(avg_val) / G

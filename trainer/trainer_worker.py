@@ -1,5 +1,6 @@
 import os
 import ray
+import time
 import torch
 
 from trainer import get_per_token_logps, grpo_loss, Logger
@@ -181,6 +182,7 @@ class TrainerManager:
         beta,
         G,
     ):
+        s_time = time.time()
         round = update_batch // (mini_batch * self.world_size)
 
         losses = []
@@ -202,7 +204,8 @@ class TrainerManager:
         for i in range(round):
             for j in range(self.world_size):
                 losses[i][j] = ray.get(losses[i][j])
-            self.logger.append(losses[i])
+            # self.logger.append(losses[i])
+        self.logger.append({"losses": losses, "gap": time.time() - s_time})
 
         for t in self.trainers:
             ray.get(t.ready.remote())
