@@ -1,8 +1,8 @@
 python train.py \
-  --log_path data/test_log \
+  --log_path data/new_log \
   --lora_config lora_config.json \
   --model_path /mnt/data/litechainrl/models/Qwen2.5-Coder-7B-Instruct/ \
-  --lora_path data/test_lora \
+  --lora_path data/new_lora \
   --qlora \
   --epsilon 0.2 \
   --beta 0.8 \

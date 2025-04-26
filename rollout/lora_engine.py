@@ -44,11 +44,13 @@ class LoRAEngine:
             )
         self.engine = vllm.LLMEngine.from_engine_args(engine_args)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model)
+
+        # FIXME: Currently seed is not compatible with the multi-turn generation.
         self.params = vllm.SamplingParams(
             temperature=1,
             repetition_penalty=1,
             max_tokens=config.max_token_per_turn,
-            seed=config.seed,
+            # seed=config.seed,
         )
         self.logprob_params = vllm.SamplingParams(
             temperature=0, top_p=1, max_tokens=1, prompt_logprobs=1
@@ -57,7 +59,7 @@ class LoRAEngine:
             temperature=0.8,
             repetition_penalty=1,
             max_tokens=config.max_token_per_turn,
-            seed=config.seed,
+            # seed=config.seed,
         )
 
         self.lora_idx = 1
