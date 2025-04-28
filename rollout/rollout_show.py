@@ -20,8 +20,10 @@ def extract_latest(root, model=None):
         dt = datetime.strptime(fn_date, time_format)
         stamps.append(dt)
 
-    # earliest = min(stamps).strftime(time_format)
+    earliest = min(stamps).strftime(time_format)
     latest = max(stamps).strftime(time_format)
+    print(earliest)
+    print(latest)
 
     for fn in file_names:
         if not fn.startswith(f"({latest})"):

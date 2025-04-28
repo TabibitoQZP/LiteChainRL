@@ -14,6 +14,12 @@ LiteChainRL streamlines experimentation with reinforcement learning on modern LL
 
 With LiteChainRL, researchers can rapidly prototype agent behaviors without the overhead of full‑parameter distributed training.
 
+## Structure
+
+LiteChainRL aims to simplify RL agent prototype build. Therefore, we keep our workflow simple and easy to adapt. It only contains a Rollout Manager and Trainer Manager. The rollout sample send to a queue then accessed by the Trainer Manager. Once Rollout Manager needs to update its LoRA adapter weight. It will load the weight from the disk.
+
+![LiteChainRL Structure](image/structure.svg)
+
 ## Key Features
 
 1. **Multi-Turn Rollouts**
@@ -81,3 +87,5 @@ The TinyZero is a simple RL project. We reimplemented it here as an simple examp
 [TinyZero](https://github.com/Jiayi-Pan/TinyZero)
 
 The task is simple. However, there is a high risk for LLM to calculate a mathematical expression incorrectly. Therefore, the best idea is to give it a "calculator". In other worlds, the LLM need to use the "calculator" as a tool to implement complex tasks.
+
+Training on 1024 samples takes about 13 hours with 2 H20 GPUs. One H20 for vLLM rollout generation and one H20 for training. More GPUs will accelerate the training process.
