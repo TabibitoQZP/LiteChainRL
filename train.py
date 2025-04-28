@@ -11,26 +11,24 @@ from rollout.engine_worker import RolloutManager
 from trainer.trainer_worker import TrainerManager
 
 # NOTE: Please import your own dataset, reward class here.
-from dataset.wikidb_dataset import WikiDBDataset as MyDataset
-from reward.code_eval_reward import CodeEvalReward as MyReward
+from dataset.tinyzero_dataset import TinyZeroDataset as MyDataset
+from reward.tinyzero_reward import TinyZeroReward as MyReward
 
 
 def train(args):
     # NOTE: Please pass correct arguments for your dataset class.
-    sqlCreationPath = "./data/SQLCreation.json"
-    setsPath = "./data/sets.json"
-    dbRoot = "/mnt/data/litechainrl/dataset/WikiDBs/part-0/"
-    start = 4
-    end = 32
-    from dataset.wikidb_dataset import prompt_template
+    data_range = (16, 64)
+    item_range = (4, 6)
+    data_szie = 1024
+    seed = 114514
+    agent = True
 
     dataset = MyDataset(
-        sqlCreationPath,
-        setsPath,
-        dbRoot,
-        start,
-        end,
-        prompt_template,
+        data_range,
+        item_range,
+        data_szie,
+        seed,
+        agent,
     )
 
     # init log path

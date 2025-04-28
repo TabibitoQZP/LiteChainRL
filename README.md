@@ -73,3 +73,11 @@ Edit `ds_config.json` for Deepspeed config, `lora_config.json` for LoRA config a
 ```bash
 bash train.sh
 ```
+
+## Example--Reinplementation of TinyZero with LiteChainRL
+
+The TinyZero is a simple RL project. We reimplemented it here as an simple example. The detail of TinyZero task can be founded here.
+
+[TinyZero](https://github.com/Jiayi-Pan/TinyZero)
+
+The task is simple. However, there is a high risk for LLM to calculate a mathematical expression incorrectly. Therefore, the best idea is to give it a "calculator". In other worlds, the LLM need to use the "calculator" as a tool to implement complex tasks.
