@@ -42,7 +42,11 @@ class LoRAEngine:
                 tensor_parallel_size=len(config.cuda_visible_devices.split(",")),
                 enable_lora=True,
             )
-        self.engine = vllm.LLMEngine.from_engine_args(engine_args)
+        if vllm.__version__.startswith("0.8"):
+            from vllm.v1.engine.llm_engine import LLMEngine
+        else:
+            from vllm.engine.llm_engine import LLMEngine
+        self.engine = LLMEngine.from_engine_args(engine_args)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model)
 
         # FIXME: Currently seed is not compatible with the multi-turn generation.
@@ -167,7 +171,10 @@ class LoRAEngine:
             envMap[request_id] = env
             tokenInfo[request_id] = []
             self.engine.add_request(
-                request_id, prompt, self.params, lora_request=self.lora_request
+                f"0-{request_id}",
+                prompt,
+                self.params,
+                lora_request=self.lora_request,
             )
 
         finishedRequest = {}
@@ -175,15 +182,18 @@ class LoRAEngine:
             outputs = self.engine.step()
             for op in outputs:
                 prompt = op.prompt + op.outputs[0].text
-                request_id = op.request_id
+                full_request_id = op.request_id
+                request_count, request_id = full_request_id.split("-", 1)
+                request_count = int(request_count)
                 prompt_token_ids = list(op.prompt_token_ids)
                 output_token_ids = list(op.outputs[0].token_ids)
 
                 env_output = envMap[request_id].trigger(prompt)
                 if env_output:
-                    self.engine.abort_request(request_id)
+                    # 这个传参只能是列表, 单元素会导致abort不掉
+                    self.engine.abort_request([full_request_id])
                     self.engine.add_request(
-                        request_id,
+                        f"{request_count + 1}-{request_id}",
                         prompt + env_output,
                         self.params,
                         lora_request=self.lora_request,
@@ -210,7 +220,7 @@ class LoRAEngine:
                             len(output_token_ids),
                         )
                     )
-                    self.engine.abort_request(request_id)
+                    self.engine.abort_request(full_request_id)
 
         masks = {}
         for k, v in tokenInfo.items():
