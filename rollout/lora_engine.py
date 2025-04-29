@@ -192,17 +192,26 @@ class LoRAEngine:
                 if env_output:
                     # 这个传参只能是列表, 单元素会导致abort不掉
                     self.engine.abort_request([full_request_id])
-                    self.engine.add_request(
-                        f"{request_count + 1}-{request_id}",
-                        prompt + env_output,
-                        self.params,
-                        lora_request=self.lora_request,
-                    )
                     tokenInfo[request_id].append(
                         (
                             len(prompt_token_ids),
                             len(output_token_ids),
                         )
+                    )
+                    # 有极小的概率生成+环境生成大于max model len
+                    if (
+                        len(self.tokenizer.encode(prompt + env_output))
+                        >= self.max_model_len
+                    ):
+                        finishedRequest[request_id] = (
+                            prompt_token_ids + output_token_ids
+                        )
+                        continue
+                    self.engine.add_request(
+                        f"{request_count + 1}-{request_id}",
+                        prompt + env_output,
+                        self.params,
+                        lora_request=self.lora_request,
                     )
                 if op.finished:
                     finishedRequest[request_id] = prompt_token_ids + output_token_ids

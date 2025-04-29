@@ -42,7 +42,7 @@ The extendable Trigger system lets you connect any callable environment—be it 
 
 ## Usage
 
-**The LiteChainRL is still under development and may have some unknown bugs. Any issues and pull requests are welcome.** Currently it only supports GRPO and vLLM-0.7.3. The higher version vLLM can still run the `LoRAEngine` in the `rollout/lora_engine.py` but have generation bugs.
+**The LiteChainRL is still under development and may have some unknown bugs. Any issues and pull requests are welcome.** Currently it only supports GRPO. The higher version vLLM can still run the `LoRAEngine` in the `rollout/lora_engine.py` but have generation bugs.
 
 To prototype your agent with our project. You just need to do 5 steps.
 
@@ -89,3 +89,7 @@ The TinyZero is a simple RL project. We reimplemented it here as an simple examp
 The task is simple. However, there is a high risk for LLM to calculate a mathematical expression incorrectly. Therefore, the best idea is to give it a "calculator". In other worlds, the LLM need to use the "calculator" as a tool to implement complex tasks.
 
 Training on 1024 samples takes about 13 hours with 2 H20 GPUs. One H20 for vLLM rollout generation and one H20 for training. More GPUs will accelerate the training process.
+
+## Qwen3 Training Support
+
+Our LiteChainRL preliminary supports Qwen3 for multi-turn RL training. Currently the demo can use newest vLLM-0.8.5 to run Qwen3. However, the preliminary test shows that Qwen3 may have a restricted format requirements. Specifically, Qwen3 enables open/close the thinking. This function is implemented by adding a `<think></think>` label. If you want to close the think, you need to add an empty label before the generation start. However, if you close the think, the generation is too short.

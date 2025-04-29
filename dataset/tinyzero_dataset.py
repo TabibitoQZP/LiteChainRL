@@ -30,6 +30,9 @@ Now please use these feature to help you find your final answer step by step. Do
 <|im_start|>assistant
 """
 
+# 不需要think则添加上这一点
+# prompt_template += "<think>\n\n</think>"
+
 
 class TinyZeroDataset(Dataset):
     def __init__(
