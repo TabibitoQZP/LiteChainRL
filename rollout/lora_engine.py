@@ -42,7 +42,11 @@ class LoRAEngine:
                 tensor_parallel_size=len(config.cuda_visible_devices.split(",")),
                 enable_lora=True,
             )
-        self.engine = vllm.LLMEngine.from_engine_args(engine_args)
+        if vllm.__version__.startswith("0.8"):
+            from vllm.v1.engine.llm_engine import LLMEngine
+        else:
+            from vllm.engine.llm_engine import LLMEngine
+        self.engine = LLMEngine.from_engine_args(engine_args)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model)
 
         # FIXME: Currently seed is not compatible with the multi-turn generation.
@@ -166,9 +170,11 @@ class LoRAEngine:
             request_id = str(uuid4())
             envMap[request_id] = env
             tokenInfo[request_id] = []
-            print(request_id)
             self.engine.add_request(
-                f"0-{request_id}", prompt, self.params, lora_request=self.lora_request
+                f"0-{request_id}",
+                prompt,
+                self.params,
+                lora_request=self.lora_request,
             )
 
         finishedRequest = {}
@@ -184,7 +190,8 @@ class LoRAEngine:
 
                 env_output = envMap[request_id].trigger(prompt)
                 if env_output:
-                    self.engine.abort_request(full_request_id)
+                    # 这个传参只能是列表, 单元素会导致abort不掉
+                    self.engine.abort_request([full_request_id])
                     self.engine.add_request(
                         f"{request_count + 1}-{request_id}",
                         prompt + env_output,
