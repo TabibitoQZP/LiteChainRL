@@ -6,7 +6,7 @@ import torch
 from trainer import get_per_token_logps, grpo_loss, Logger
 
 
-@ray.remote
+@ray.remote(num_gpus=8)
 class TrainerWorker:
     def __init__(
         self,
@@ -20,15 +20,16 @@ class TrainerWorker:
         qlora,
     ):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
         os.environ["MASTER_ADDR"] = "127.0.0.1"
         os.environ["MASTER_PORT"] = str(master_port)
         os.environ["WORLD_SIZE"] = str(world_size)
         os.environ["RANK"] = str(rank)
-        # os.environ["LOCAL_RANK"] = str(device)
-        os.environ["LOCAL_RANK"] = "0"
+        os.environ["LOCAL_RANK"] = str(device)
+        # os.environ["LOCAL_RANK"] = "0"
         import deepspeed
 
-        deepspeed.init_distributed()
+        deepspeed.init_distributed(dist_backend="nccl")
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         self.lora_path = lora_path
@@ -41,7 +42,8 @@ class TrainerWorker:
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
         model = AutoModelForCausalLM.from_pretrained(
-            model_path, quantization_config=nf4_config
+            model_path,
+            quantization_config=nf4_config,
         )
         model.load_adapter(lora_path, is_trainable=True)
         self.engine, self.optimizer, _, _ = deepspeed.initialize(
@@ -50,6 +52,7 @@ class TrainerWorker:
             model_parameters=model.parameters(),
             dist_init_required=False,
         )
+        print(self.engine.device)
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.world = world_size
 
