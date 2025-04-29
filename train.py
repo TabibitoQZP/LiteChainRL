@@ -76,28 +76,26 @@ def train(args):
     # start train loop
     out_queue = Queue()
     while True:
-        finish = rollout_manager.start_a_rollout.remote(
+        all_dataset_finish = rollout_manager.start_a_rollout.remote(
             args.sampling_batch,
             args.update_batch,
             mini_batch,
             out_queue,
         )
-        ray.get(
-            trainer_manager.train_a_rollout.remote(
-                out_queue,
-                args.update_batch,
-                mini_batch,
-                args.max_model_len,
-                args.epsilon,
-                args.beta,
-                args.sampling_batch,
-            )
+        one_rollout_finish = trainer_manager.train_a_rollout.remote(
+            out_queue,
+            args.update_batch,
+            mini_batch,
+            args.max_model_len,
+            args.epsilon,
+            args.beta,
+            args.sampling_batch,
         )
-        assert out_queue.empty(), "The queue should be empty."
-        rollout_manager.update_weight.remote()
-
-        if ray.get(finish):
+        if ray.get(all_dataset_finish):
             break
+        ray.get(one_rollout_finish)
+        rollout_manager.update_weight.remote()
+        assert out_queue.empty(), "The queue should be empty."
 
 
 if __name__ == "__main__":
